@@ -101,7 +101,10 @@ func (l *Limit) DeleteOrder(o *Order) {
 }
 
 func (l *Limit) Fill(o *Order) []Match {
-	matches := []Match{}
+	var (
+		matches        []Match
+		ordersToDelete []*Order
+	)
 
 	for _, order := range l.Orders {
 		match := l.fillOrder(order, o)
@@ -109,9 +112,19 @@ func (l *Limit) Fill(o *Order) []Match {
 
 		l.TotalVolume -= match.SizeFilled
 
+		// store orders to be deleted after the loop to prevent data corruption
+		if order.IsFilled() {
+			fmt.Println("order is filled")
+			ordersToDelete = append(ordersToDelete, order)
+		}
+
 		if o.IsFilled() {
 			break
 		}
+	}
+
+	for _, order := range ordersToDelete {
+		l.DeleteOrder(order)
 	}
 
 	return matches
@@ -171,7 +184,7 @@ func NewOrderBook() *OrderBook {
 func (ob *OrderBook) PlaceMarketOrder(o *Order) []Match {
 	matches := []Match{}
 
-	if o.Bid {
+	if o.Bid { // placing a buy order
 		if o.Size > ob.AskTotalVolume() {
 			panic(fmt.Errorf("not enough volume [size: %.2f] for market order [size: %.2f]", ob.AskTotalVolume(), o.Size))
 		}
@@ -179,7 +192,14 @@ func (ob *OrderBook) PlaceMarketOrder(o *Order) []Match {
 			limitMatches := limit.Fill(o)
 			matches = append(matches, limitMatches...)
 		}
-	} else {
+	} else { // placing a ask order
+		if o.Size > ob.BidTotalVolume() {
+			panic(fmt.Errorf("not enough volume [size: %.2f] for market order [size: %.2f]", ob.BidTotalVolume(), o.Size))
+		}
+		for _, limit := range ob.Bids() {
+			limitMatches := limit.Fill(o)
+			matches = append(matches, limitMatches...)
+		}
 
 	}
 
