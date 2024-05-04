@@ -36,16 +36,16 @@ func NewOrder(bid bool, size float64) *Order {
 }
 
 func (o *Order) String() string {
-	return fmt.Sprintf("Order{Size: %f | Bid: %t | Timestamp: %d}", o.Size, o.Bid, o.Timestamp)
+	return fmt.Sprintf("Order{Size: %f | Bid: %t }", o.Size, o.Bid)
 }
 func (o *Order) IsFilled() bool {
 	return o.Size == 0.0
 }
 
-// a price level that a set of orders will excute at
+// a price level that a set of orders will execute at
 type Limit struct {
 	Price       float64
-	Orders      Orders // orders that share the same exucution price
+	Orders      Orders // orders that share the same execution price
 	TotalVolume float64
 }
 
@@ -86,8 +86,9 @@ func (l *Limit) AddOrder(o *Order) {
 }
 
 func (l *Limit) DeleteOrder(o *Order) {
-	for i, order := range l.Orders {
-		if order == o {
+	fmt.Println("deleting order")
+	for i := 0; i < len(l.Orders); i++ {
+		if l.Orders[i] == o {
 			// replace the order to be deleted with the last order in the list and then remove the last order
 			l.Orders[i] = l.Orders[len(l.Orders)-1]
 			l.Orders = l.Orders[:len(l.Orders)-1]
@@ -181,6 +182,7 @@ func NewOrderBook() *OrderBook {
 	}
 }
 
+// place a market order to buy or sell at the best available price
 func (ob *OrderBook) PlaceMarketOrder(o *Order) []Match {
 	matches := []Match{}
 
@@ -191,6 +193,11 @@ func (ob *OrderBook) PlaceMarketOrder(o *Order) []Match {
 		for _, limit := range ob.Asks() {
 			limitMatches := limit.Fill(o)
 			matches = append(matches, limitMatches...)
+
+			if len(limit.Orders) == 0 {
+				ob.clearLimit(false, limit)
+			}
+
 		}
 	} else { // placing a ask order
 		if o.Size > ob.BidTotalVolume() {
@@ -199,13 +206,17 @@ func (ob *OrderBook) PlaceMarketOrder(o *Order) []Match {
 		for _, limit := range ob.Bids() {
 			limitMatches := limit.Fill(o)
 			matches = append(matches, limitMatches...)
-		}
 
+			if len(limit.Orders) == 0 {
+				ob.clearLimit(true, limit)
+			}
+		}
 	}
 
 	return matches
 }
 
+// place an order to sell or buy at a specific price
 func (ob *OrderBook) PlaceLimitOrder(price float64, o *Order) {
 	var limit *Limit
 
@@ -229,6 +240,29 @@ func (ob *OrderBook) PlaceLimitOrder(price float64, o *Order) {
 	}
 }
 
+// if a limit has been filled clear it from the order book
+func (ob *OrderBook) clearLimit(bid bool, l *Limit) {
+	// remove from both the map and the slice
+	if bid {
+		delete(ob.BidLimits, l.Price)
+		for i := 0; i < len(ob.bids); i++ {
+			if ob.bids[i] == l {
+				ob.bids[i] = ob.bids[len(ob.bids)-1]
+				ob.bids = ob.bids[:len(ob.bids)-1]
+			}
+		}
+	} else {
+		delete(ob.AskLimits, l.Price)
+		for i := 0; i < len(ob.asks); i++ {
+			if ob.asks[i] == l {
+				ob.asks[i] = ob.asks[len(ob.asks)-1]
+				ob.asks = ob.asks[:len(ob.asks)-1]
+			}
+		}
+	}
+}
+
+// total amount of bids in the order book
 func (ob *OrderBook) BidTotalVolume() float64 {
 	totalVolume := 0.0
 
@@ -239,6 +273,7 @@ func (ob *OrderBook) BidTotalVolume() float64 {
 	return totalVolume
 }
 
+// total amount of asks in the order book
 func (ob *OrderBook) AskTotalVolume() float64 {
 	totalVolume := 0.0
 
