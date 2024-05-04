@@ -1,7 +1,8 @@
-package main
+package orderbook
 
 import (
 	"fmt"
+	"math/rand"
 	"sort"
 	"time"
 )
@@ -15,6 +16,7 @@ type Match struct {
 
 // a request to buy or sell a certain amount of an asset
 type Order struct {
+	ID        int64
 	Size      float64
 	Bid       bool // true -> bid, false -> ask
 	Limit     *Limit
@@ -29,6 +31,7 @@ func (o Orders) Less(i, j int) bool { return o[i].Timestamp < o[j].Timestamp }
 
 func NewOrder(bid bool, size float64) *Order {
 	return &Order{
+		ID:        int64(rand.Intn(1000000)),
 		Size:      size,
 		Bid:       bid,
 		Timestamp: time.Now().UnixNano(),
@@ -86,7 +89,6 @@ func (l *Limit) AddOrder(o *Order) {
 }
 
 func (l *Limit) DeleteOrder(o *Order) {
-	fmt.Println("deleting order")
 	for i := 0; i < len(l.Orders); i++ {
 		if l.Orders[i] == o {
 			// replace the order to be deleted with the last order in the list and then remove the last order
@@ -115,7 +117,6 @@ func (l *Limit) Fill(o *Order) []Match {
 
 		// store orders to be deleted after the loop to prevent data corruption
 		if order.IsFilled() {
-			fmt.Println("order is filled")
 			ordersToDelete = append(ordersToDelete, order)
 		}
 
@@ -228,7 +229,6 @@ func (ob *OrderBook) PlaceLimitOrder(price float64, o *Order) {
 
 	if limit == nil {
 		limit = NewLimit(price)
-		limit.AddOrder(o)
 
 		if o.Bid {
 			ob.bids = append(ob.bids, limit)
@@ -238,6 +238,8 @@ func (ob *OrderBook) PlaceLimitOrder(price float64, o *Order) {
 			ob.AskLimits[price] = limit
 		}
 	}
+
+	limit.AddOrder(o)
 }
 
 // if a limit has been filled clear it from the order book
@@ -262,11 +264,17 @@ func (ob *OrderBook) clearLimit(bid bool, l *Limit) {
 	}
 }
 
+func (ob *OrderBook) CancelOrder(o *Order) {
+	limit := o.Limit
+	limit.DeleteOrder(o)
+}
+
 // total amount of bids in the order book
 func (ob *OrderBook) BidTotalVolume() float64 {
 	totalVolume := 0.0
 
 	for i := 0; i < len(ob.bids); i++ {
+		fmt.Println(ob.bids[i].TotalVolume)
 		totalVolume += ob.bids[i].TotalVolume
 	}
 
